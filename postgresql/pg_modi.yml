@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  labels:
+    app: postgres
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: some-postgres
+  labels:
+    name: some-postgres
+spec:
+  containers:
+    - image: postgres:11.7
+      name: postgres
+      env:
+        - name: "POSTGRES_PASSWORD"
+          value: "postgres*123"
+        - name: "POSTGRES_USER"
+          value: "postgres"
+        - name: "POSTGRES_DB"
+          value: "postgres"
+---
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: postgres-pv-volume
+  labels:
+    type: local
+    app: postgres
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: postgres-pv-claim
+  labels:
+    app: postgres
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+  replicas: 1
+  template:
+    metadata:
+        labels:
+          app: postgres
+    spec:
+        containers:
+        - name: postgres 
+          image: postgres:11.7
+          imagePullPolicy: "IfNotPresent"
+          ports:
+            - containerPort: 5432
+              name: postgres
+          envFrom:
+            - configMapRef:
+                name: postgres-config
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgres-pv-claim
+        volumes:
+          - name: postgres-pv-claim
+            persistentVolumeClaim:
+                  claimName: postgres-pv-claim
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+spec:
+  type: NodePort
+  ports:
+   - port: 5432
+  selector:
+   app: postgres
